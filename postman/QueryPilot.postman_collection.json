@@ -1,0 +1,676 @@
+{
+  "info": {
+    "name": "QueryPilot API",
+    "description": "Requests for the QueryPilot Django backend. Start the backend first:\n\n    cd backend\n    python manage.py runserver\n\nEvery URL starts with {{baseUrl}} (http://127.0.0.1:8000), set under the collection's Variables tab.\nKeep the slash at the end of each URL: Django rejects a POST without it.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000"
+    },
+    {
+      "key": "previousTurn",
+      "value": "null"
+    },
+    {
+      "key": "docId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Check the backend",
+      "item": [
+        {
+          "name": "Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "health",
+                ""
+              ]
+            },
+            "description": "Shows which LLM is connected, the date range of the data and the sample questions."
+          }
+        },
+        {
+          "name": "API home (all links)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                ""
+              ]
+            },
+            "description": "Lists every endpoint, plus a link for each table."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Ask the AI",
+      "item": [
+        {
+          "name": "Ask a question",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/ask/?stream=false",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ask",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "stream",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "Runs the whole pipeline and returns one JSON response.\n\nLook at: insight (the answer), sql, columns + rows (the data), steps (each stage with its time), context (knowledge-base entries used, with similarity scores).\n\nChange the question in the Body tab. In offline demo mode only the 6 sample questions work.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"What is the refund rate by sales channel?\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Saves this question and its SQL so the 'Ask a follow-up' request can use them.",
+                  "const r = pm.response.json();",
+                  "if (r.status === 'answered') {",
+                  "  pm.collectionVariables.set('previousTurn', JSON.stringify({ question: r.question, sql: r.sql }));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ask a follow-up",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/ask/?stream=false",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ask",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "stream",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "Sends the previous question and SQL as context, so the AI can build on them. Run 'Ask a question' first; it fills {{previousTurn}} automatically.\n\nNeeds a real LLM: offline demo mode can't answer follow-ups.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"Now show only the web and mobile channels\",\n  \"previous\": {{previousTurn}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Ask with GET",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/ask/?q=How many active customers do we have?",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ask",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "How many active customers do we have?"
+                }
+              ]
+            },
+            "description": "Same as 'Ask a question', but the question goes in the q parameter (see the Params tab)."
+          }
+        },
+        {
+          "name": "Ask (streaming)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/ask/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ask",
+                ""
+              ]
+            },
+            "description": "Without ?stream=false the server sends one JSON line per step as it finishes. Postman shows all the lines together once the response is complete. This is how a client could show live progress.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"Which product categories have the best gross margin %?\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Run your own SQL",
+      "item": [
+        {
+          "name": "Run SQL",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sql/run/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sql",
+                "run",
+                ""
+              ]
+            },
+            "description": "Runs a read-only SELECT query through the same safety check the AI's SQL goes through.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sql\": \"SELECT category, COUNT(*) AS products, ROUND(AVG(unit_price), 2) AS avg_price\\nFROM products\\nGROUP BY category\\nORDER BY avg_price DESC\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Run SQL (blocked)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sql/run/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sql",
+                "run",
+                ""
+              ]
+            },
+            "description": "Shows the safety check: anything other than SELECT is refused with status 400 and nothing runs.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sql\": \"DELETE FROM customers\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Query plan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/sql/explain/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "sql",
+                "explain",
+                ""
+              ]
+            },
+            "description": "SQLite's plan for a query. SEARCH ... USING INDEX means an index is used; SCAN reads the whole table.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sql\": \"SELECT * FROM orders WHERE order_date >= '2026-01-01'\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Look at the data",
+      "item": [
+        {
+          "name": "Schema (tables and columns)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/schema/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "schema",
+                ""
+              ]
+            },
+            "description": "Every table with its columns, types, row count, and the allowed values for columns like status."
+          }
+        },
+        {
+          "name": "Customers (first rows)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tables/customers/?limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tables",
+                "customers",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Change limit in the Params tab (up to 500)."
+          }
+        },
+        {
+          "name": "Products (first rows)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tables/products/?limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tables",
+                "products",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "First rows of products."
+          }
+        },
+        {
+          "name": "Orders (first rows)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tables/orders/?limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tables",
+                "orders",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "First rows of orders."
+          }
+        },
+        {
+          "name": "Order items (first rows)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tables/order_items/?limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "tables",
+                "order_items",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "First rows of order_items."
+          }
+        },
+        {
+          "name": "Question history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/history/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "history",
+                ""
+              ]
+            },
+            "description": "The last 30 questions asked, newest first."
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Knowledge base (RAG demo)",
+      "item": [
+        {
+          "name": "List entries",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/knowledge/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "knowledge",
+                ""
+              ]
+            },
+            "description": "All business rules, table guides and example queries."
+          }
+        },
+        {
+          "name": "Ask VIP question (before)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/ask/?stream=false",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ask",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "stream",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "No entry defines a VIP customer yet. In demo mode status is 'unanswerable'; a real LLM usually guesses and lists its guess under 'assumptions'.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"How many VIP customers do we have in each region?\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Add VIP entry",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/knowledge/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "knowledge",
+                ""
+              ]
+            },
+            "description": "Adds a business rule. The response includes the new id, which is saved to {{docId}}.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"VIP customer\",\n  \"kind\": \"glossary\",\n  \"content\": \"A VIP customer has lifetime revenue (completed orders only) of at least $10,000.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Saves the new entry's id so 'Update' and 'Delete' know which entry to change.",
+                  "pm.collectionVariables.set('docId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ask VIP question (after)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/ask/?stream=false",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ask",
+                ""
+              ],
+              "query": [
+                {
+                  "key": "stream",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "Same question again. Now the answer uses the $10,000 rule: look for 'VIP customer' first in context and '>= 10000' in sql.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"question\": \"How many VIP customers do we have in each region?\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Update entry",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/knowledge/{{docId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "knowledge",
+                "{{docId}}",
+                ""
+              ]
+            },
+            "description": "Changes the rule to $20,000. Run 'Ask VIP question (after)' again to see fewer VIP customers.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"VIP customer\",\n  \"kind\": \"glossary\",\n  \"content\": \"A VIP customer has lifetime revenue (completed orders only) of at least $20,000.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Delete entry",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/knowledge/{{docId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "knowledge",
+                "{{docId}}",
+                ""
+              ]
+            },
+            "description": "Removes the VIP entry. Returns status 204 with an empty body."
+          }
+        }
+      ]
+    }
+  ]
+}
